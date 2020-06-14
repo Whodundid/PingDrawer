@@ -1,0 +1,16 @@
+[
+{
+  "modid": "pingdrawer",
+  "name": "Ping Drawer",
+  "description": "EMCApp: Displays player's ping along with exact ping values in tab.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["Whodundid, Mr.JamminOtter"],
+  "credits": "Requires 'EnhancedMC' version 1.0 to work!",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": ["enhancedmc"]
+}
+]
