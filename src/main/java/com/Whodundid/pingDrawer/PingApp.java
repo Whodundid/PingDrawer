@@ -7,6 +7,7 @@ import com.Whodundid.core.app.IUseScreenLocation;
 import com.Whodundid.core.app.config.AppConfigFile;
 import com.Whodundid.core.app.config.AppConfigSetting;
 import com.Whodundid.core.coreApp.CoreApp;
+import com.Whodundid.core.coreEvents.emcEvents.GameWindowResizedEvent;
 import com.Whodundid.core.renderer.renderUtil.IRendererProxy;
 import com.Whodundid.core.renderer.taskView.TaskBar;
 import com.Whodundid.core.terminal.window.ETerminal;
@@ -15,6 +16,7 @@ import com.Whodundid.core.util.renderUtil.GLObject;
 import com.Whodundid.core.util.renderUtil.ScreenLocation;
 import com.Whodundid.core.util.resourceUtil.EResource;
 import com.Whodundid.core.util.storageUtil.EArrayList;
+import com.Whodundid.core.util.storageUtil.EDimension;
 import com.Whodundid.core.util.storageUtil.StorageBox;
 import com.Whodundid.core.windowLibrary.windowTypes.interfaces.IWindowParent;
 import com.Whodundid.pingDrawer.settings.EnableTabSetting;
@@ -70,6 +72,7 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 	public static final AppConfigSetting<Boolean> drawOwn = new AppConfigSetting(Boolean.class, "drawOwn", "Draw Personal Ping", true);
 	public static final AppConfigSetting<Boolean> drawWithChat = new AppConfigSetting(Boolean.class, "drawWithChat", "Draw With Chat Open", true);
 	public static final AppConfigSetting<Boolean> drawWithHud = new AppConfigSetting(Boolean.class, "drawWithHud", "Draw With Hud Open", true);
+	public static final AppConfigSetting<Boolean> drawOwnThresholds = new AppConfigSetting(Boolean.class, "drawOwnThresholds", "Draw Personal Ping with Thresholds", true);
 	public static final AppConfigSetting<Integer> ownColor = new AppConfigSetting(Integer.class, "ownColor", "Personal Ping Color", 0xff00ff00);
 	public static final AppConfigSetting<Integer> lowThresh = new AppConfigSetting(Integer.class, "lowThresh", "Low Ping Threshhold", 100);
 	public static final AppConfigSetting<Integer> medThresh = new AppConfigSetting(Integer.class, "lowThresh", "Medium Ping Threshhold", 175);
@@ -86,6 +89,7 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 	private EnhancedTabList tabList = null;
 	private GuiPlayerTabOverlay vanillaTabList = null;
 	NetHandlerPlayClient nethandlerplayclient;
+	NetPlayerComparator comparator = new NetPlayerComparator();
 	Ordering<NetworkPlayerInfo> order;
 	List<EntityPlayer> list;
 	List<NetworkPlayerInfo> nameList;
@@ -103,7 +107,7 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 	@Override
 	public void build() {
 		version = VERSION;
-		versionDate = "June 11, 2020";
+		versionDate = "June 15, 2020";
 		author = "Whodundid";
 		artist = "Mr.JamminOtter";
 		donation = new StorageBox("Consider donating to support EMC development!", "https://www.paypal.me/Whodundid");
@@ -114,7 +118,7 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 		
 		logo = new EArrayList<EResource>(PingResources.logo);
 		
-		registerSetting(enableTab, loc, drawWithChat, drawWithHud, ownColor, lowThresh, medThresh, highThresh, lowColor, medColor, highColor, vhighColor);
+		registerSetting(enableTab, loc, drawWithChat, drawWithHud, ownColor, drawOwnThresholds, lowThresh, medThresh, highThresh, lowColor, medColor, highColor, vhighColor);
 		
 		setMainWindow(new PingAppSettingsWindow());
 		addWindow(new PingSetLocationWindow());
@@ -138,38 +142,36 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 	
 	@Override
 	public void serverJoinEvent(EntityJoinWorldEvent e) {
-		if (isEnabled()) {
-			try {
-				if (e != null) {
-					if (e.entity != null && e.entity.equals(mc.thePlayer)) {
-						if (enableTab.get()) {
-							if (mc.ingameGUI != null) {
-								tabList = new EnhancedTabList(this, mc.ingameGUI);
-								vanillaTabList = new GuiPlayerTabOverlay(mc, mc.ingameGUI);
-							}
-							updateTabState(isEnabled());
+		try {
+			if (e != null) {
+				if (e.entity != null && e.entity.equals(mc.thePlayer)) {
+					if (enableTab.get()) {
+						if (mc.ingameGUI != null) {
+							tabList = new EnhancedTabList(this, mc.ingameGUI);
+							vanillaTabList = new GuiPlayerTabOverlay(mc, mc.ingameGUI);
 						}
-						
-						hasPing = !mc.isSingleplayer();
-						if (hasPing) {
-							ping = -1;
-						}
+						updateTabState(isEnabled());
 					}
 					
-					lastJoinedEntity = e.entity;
+					hasPing = !mc.isSingleplayer();
+					if (hasPing) {
+						ping = -1;
+					}
 				}
+				
+				lastJoinedEntity = e.entity;
 			}
-			catch (Exception q) { q.printStackTrace(); }
 		}
+		catch (Exception q) { q.printStackTrace(); }
 	}
 	
 	@Override
 	public void clientTickEvent(TickEvent.ClientTickEvent e) {
-		if (isEnabled() && hasPing) {
+		if (hasPing) {
 			if (mc.theWorld != null && mc.thePlayer != null) {
 				list = mc.theWorld.playerEntities;
 				nethandlerplayclient = mc.thePlayer.sendQueue;
-				order = Ordering.from(new NetPlayerComparator());
+				order = Ordering.from(comparator);
 				nameList = order.sortedCopy(nethandlerplayclient.getPlayerInfoMap());
 				if (!nameList.isEmpty()) {
 					for (NetworkPlayerInfo i : nameList) {
@@ -209,24 +211,36 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 	
 	@Override
 	public void overlayPreEvent(RenderGameOverlayEvent.Pre e) {
-		if (isEnabled()) {
-			if (toggleTab && mc.theWorld != null) {
-				if (e.type == ElementType.PLAYER_LIST && e.isCancelable()) {
-					e.setCanceled(true);
-				}
+		if (toggleTab && mc.theWorld != null) {
+			if (e.type == ElementType.PLAYER_LIST && e.isCancelable()) {
+				e.setCanceled(true);
 			}
 		}
 	}
 	
 	@Override
 	public void overlayPostEvent(RenderGameOverlayEvent.Post e) {
-		if (isEnabled()) {
-			if (enableTab.get() && toggleTab && mc.theWorld != null) {
-				drawTab();
-			}
-			if (hasPing) {
-				drawPing();
-			}
+		if (enableTab.get() && toggleTab && mc.theWorld != null) {
+			drawTab();
+		}
+		
+		if (hasPing) {
+			drawPing();
+		}
+	}
+	
+	@Override
+	public void gameWindowResized(GameWindowResizedEvent e) {
+		EDimension old = EnhancedMC.getRenderer().getDimensions();
+		int oldW = old.width;
+		int oldH = old.height;
+		
+		if (loc.get() == ScreenLocation.custom) {
+			int newX = (xPos * e.getWidth()) / oldW;
+			int newY = (yPos * e.getHeight()) / oldH;
+			
+			xPos = newX;
+			yPos = newY;
 		}
 	}
 	
@@ -294,8 +308,18 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 		
 		ScaledResolution res = new ScaledResolution(mc);
 		if (mc.theWorld != null) {
-			String msg = ping > 0 ? "PING: " + ping + " ms" : "Calculating..";
-			int l = mc.fontRendererObj.getStringWidth(msg);
+			
+			String msg = "Calculating..";
+			String pingS = "";
+			
+			if (hasPing) {
+				msg = "PING: ";
+				pingS = ping + " ms";
+			}
+			
+			int msgLen = mc.fontRendererObj.getStringWidth(msg);
+			int pingLen = mc.fontRendererObj.getStringWidth(pingS);
+			int l = msgLen + pingLen;
 			
 			boolean hud = Minecraft.getMinecraft().currentScreen instanceof IRendererProxy;
 			TaskBar bar = EnhancedMC.getRenderer().getTaskBar();
@@ -323,7 +347,7 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 				break;
 			case center:
 				drawPosX = res.getScaledWidth() / 2 - (l / 2);
-				drawPosY = res.getScaledHeight() / 2 - 11;
+				drawPosY = res.getScaledHeight() / 2 + 26;
 				break;
 			case custom:
 				drawPosX = xPos;
@@ -360,7 +384,14 @@ public final class PingApp extends EMCApp implements IUseScreenLocation {
 			}
 			
 			GLObject.drawRect(drawPosX, drawPosY, drawPosX + l + 1, drawPosY - 10, Integer.MIN_VALUE);
-			GLObject.drawString(msg, drawPosX + 1, drawPosY - 9, ownColor.get());
+			
+			if (drawOwnThresholds.get()) {
+				int eX = GLObject.drawString(msg, drawPosX + 1, drawPosY - 9, ownColor.get());
+				GLObject.drawString(pingS, eX, drawPosY - 9, getPingColor(ping));
+			}
+			else {
+				GLObject.drawString(msg + pingS, drawPosX + 1, drawPosY - 9, ownColor.get());
+			}
 		}
 	}
 	
